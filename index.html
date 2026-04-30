@@ -479,21 +479,29 @@ async function loadHub(){
 function renderHub(){
   const sections=['Team Lead','Coach'];
   document.getElementById('hub-content').innerHTML=sections.map(sec=>{
-    const roles=S.hubData.filter(h=>h.section===sec);
-    return `<div class="mb-6">
-      <h3 class="text-sm font-bold text-gray-600 mb-2 pb-1.5 border-b border-gray-200">${sec==='Coach'?'🏆':'🎯'} ${sec}</h3>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-        ${roles.map(h=>`<div class="bg-white rounded-lg border border-gray-100 shadow-sm px-3 py-2">
-          <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">${esc(h.role_name)}</p>
-          ${h.stores.map(s=>`<div class="flex items-center gap-1.5 mb-1">
-            <span class="text-xs font-semibold text-gray-400 bg-gray-100 rounded px-1.5 py-0.5 shrink-0">#${esc(s.store_number)}</span>
-            <button onclick="openTrainerEdit(${s.id},'${esc(h.role_name)}','${esc(s.store_number)}')"
-              class="text-xs font-semibold hover:underline text-left truncate" style="color:#0053e2">
-              ${s.trainer_name||'<span class="text-gray-300 italic font-normal">—</span>'}
-            </button>
-          </div>`).join('')}
-          ${h.stores.some(s=>s.trainee_name)?h.stores.filter(s=>s.trainee_name).map(s=>`<p class="text-xs text-gray-400 mt-0.5">→ ${esc(s.trainee_name)}</p>`).join(''):''}
-        </div>`).join('')}
+    const roles=[...S.hubData.filter(h=>h.section===sec)].sort((a,b)=>a.role_name.localeCompare(b.role_name));
+    return `<div class="mb-5">
+      <h3 class="text-sm font-bold text-gray-600 mb-2 pb-1 border-b border-gray-200">${sec==='Coach'?'🏆':'🎯'} ${sec}</h3>
+      <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <table class="w-full">
+          <tbody>
+            ${roles.map((h,i)=>`<tr class="${i>0?'border-t border-gray-50':''}">
+              <td class="px-3 py-1.5 text-xs font-bold text-gray-500 whitespace-nowrap w-36">${esc(h.role_name)}</td>
+              <td class="px-3 py-1.5">
+                <div class="flex flex-wrap gap-x-4 gap-y-0.5">
+                  ${h.stores.map(s=>`<span class="inline-flex items-center gap-1 text-xs">
+                    <span class="text-gray-400 font-mono">#${esc(s.store_number)}</span>
+                    <button onclick="openTrainerEdit(${s.id},'${esc(h.role_name)}','${esc(s.store_number)}')"
+                      class="font-semibold hover:underline" style="color:#0053e2">
+                      ${s.trainer_name||'<span class="text-gray-300 italic font-normal">—</span>'}
+                    </button>
+                    ${s.trainee_name?`<span class="text-gray-400">→ ${esc(s.trainee_name)}</span>`:''}
+                  </span>`).join('')}
+                </div>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
       </div>
     </div>`;
   }).join('');
