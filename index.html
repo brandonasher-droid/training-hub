@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Training Tracker — Market 336</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root { --wmt-blue:#0053e2; --wmt-spark:#ffc220; }
+  .wmt-btn { @apply font-semibold rounded-lg px-4 py-2 transition-colors text-sm; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f8fafc; }
+  .spinner { display:inline-block; width:18px; height:18px; border:3px solid #e2e8f0;
+             border-top-color:#0053e2; border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+             z-index:50; align-items:center; justify-content:center; }
+  .overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:1rem; padding:1.5rem;
+           width:min(520px,95vw); max-height:90vh; overflow-y:auto;
+           box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  .field { margin-bottom:.875rem; }
+  .field label { display:block; font-size:.8rem; font-weight:600;
+                 color:#374151; margin-bottom:.25rem; }
+  .field input, .field select, .field textarea {
+    width:100%; border:1px solid #d1d5db; border-radius:.5rem;
+    padding:.5rem .75rem; font-size:.875rem; outline:none;
+    transition:border-color .15s; background:#fff; }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    border-color:#0053e2; box-shadow:0 0 0 3px rgba(0,83,226,.1); }
+  .badge { display:inline-flex; align-items:center; gap:.25rem;
+           font-size:.75rem; font-weight:700; padding:.25rem .625rem; border-radius:9999px; }
+  .status-done { background:#dcfce7; color:#15803d; border:1px solid #86efac; cursor:pointer; }
+  .status-pending { background:#fefce8; color:#854d0e; border:1px solid #fde047; cursor:pointer; }
+  .comment-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:.75rem;
+                  padding:.75rem 1rem; margin-bottom:.5rem; position:relative; }
+  .comment-del { position:absolute; top:.5rem; right:.5rem; background:none; border:none;
+                 color:#9ca3af; cursor:pointer; font-size:.8rem; padding:.125rem .375rem;
+                 border-radius:.25rem; }
+  .comment-del:hover { background:#fee2e2; color:#dc2626; }
+  tr:hover { background:#eff6ff; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ── Header ── -->
+<header style="background:#0053e2;" class="text-white shadow-lg">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-bold tracking-tight">🎓 Training Tracker</h1>
+      <p class="text-blue-200 text-xs mt-0.5">Market 336 · Region 40</p>
+    </div>
+    <button onclick="openAddModal()"
+            class="bg-white text-blue-700 font-bold text-sm px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors">
+      + Add Trainee
+    </button>
+  </div>
+</header>
+
+<!-- ── Stats Bar ── -->
+<div class="max-w-7xl mx-auto px-4 mt-6">
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+      <p class="text-3xl font-bold" style="color:#0053e2" id="stat-total">—</p>
+      <p class="text-xs text-gray-500 font-semibold mt-1">Total Trainees</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+      <p class="text-3xl font-bold text-green-600" id="stat-done">—</p>
+      <p class="text-xs text-gray-500 font-semibold mt-1">Completed</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+      <p class="text-3xl font-bold text-yellow-600" id="stat-progress">—</p>
+      <p class="text-xs text-gray-500 font-semibold mt-1">In Progress</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
+      <p class="text-3xl font-bold" style="color:#ffc220" id="stat-pct">—</p>
+      <p class="text-xs text-gray-500 font-semibold mt-1">Completion %</p>
+    </div>
+  </div>
+
+  <!-- ── Filters ── -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
+    <input id="search" placeholder="🔍 Search by name…" oninput="renderTable()"
+           class="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-48
+                  focus:outline-none focus:border-blue-400"/>
+    <select id="filter-area" onchange="renderTable()"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white
+                   focus:outline-none focus:border-blue-400">
+      <option value="">All Areas</option>
+    </select>
+    <select id="filter-status" onchange="renderTable()"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white
+                   focus:outline-none focus:border-blue-400">
+      <option value="">All Statuses</option>
+      <option value="done">✅ Complete</option>
+      <option value="pending">⏳ In Progress</option>
+    </select>
+  </div>
+
+  <!-- ── Table ── -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-10">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr style="background:#0053e2;" class="text-white text-left text-xs uppercase tracking-wider">
+            <th class="px-4 py-3 font-semibold">Associate</th>
+            <th class="px-4 py-3 font-semibold">Role</th>
+            <th class="px-4 py-3 font-semibold">Home Store</th>
+            <th class="px-4 py-3 font-semibold">Training Store</th>
+            <th class="px-4 py-3 font-semibold">Area</th>
+            <th class="px-4 py-3 font-semibold">Week</th>
+            <th class="px-4 py-3 font-semibold text-center">Status</th>
+            <th class="px-4 py-3 font-semibold text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body">
+          <tr><td colspan="8" class="text-center py-12 text-gray-400">
+            <span class="spinner"></span>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Modal ── -->
+<div class="overlay" id="add-modal">
+  <div class="modal">
+    <h2 class="text-base font-bold mb-4" style="color:#0053e2">➕ Add Trainee</h2>
+    <div class="field"><label>Associate Name *</label>
+      <input id="f-name" placeholder="First Last"/></div>
+    <div class="field"><label>Role *</label>
+      <select id="f-role"></select></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="field"><label>Home Store # *</label>
+        <input id="f-home" placeholder="e.g. 1234"/></div>
+      <div class="field"><label>Training Store # *</label>
+        <input id="f-training" placeholder="e.g. 5678"/></div>
+    </div>
+    <div class="field"><label>Training Area *</label>
+      <select id="f-area"></select></div>
+    <div class="field"><label>Training Week *</label>
+      <select id="f-week"></select></div>
+    <div class="field"><label>Notes</label>
+      <textarea id="f-notes" rows="2" placeholder="Any extra notes…"></textarea></div>
+    <div class="flex gap-3 justify-end mt-4">
+      <button onclick="closeModal('add-modal')"
+              class="px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg hover:bg-gray-50">
+        Cancel</button>
+      <button onclick="submitAdd()"
+              class="px-4 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90"
+              style="background:#0053e2">Add Trainee</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Modal ── -->
+<div class="overlay" id="edit-modal">
+  <div class="modal">
+    <h2 class="text-base font-bold mb-4" style="color:#0053e2">✏️ Edit Trainee</h2>
+    <div class="field"><label>Associate Name *</label>
+      <input id="e-name" placeholder="First Last"/></div>
+    <div class="field"><label>Role *</label>
+      <select id="e-role"></select></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="field"><label>Home Store # *</label>
+        <input id="e-home" placeholder="e.g. 1234"/></div>
+      <div class="field"><label>Training Store # *</label>
+        <input id="e-training" placeholder="e.g. 5678"/></div>
+    </div>
+    <div class="field"><label>Training Area *</label>
+      <select id="e-area"></select></div>
+    <div class="field"><label>Training Week *</label>
+      <select id="e-week"></select></div>
+    <div class="field"><label>Notes</label>
+      <textarea id="e-notes" rows="2"></textarea></div>
+    <div class="flex gap-3 justify-end mt-4">
+      <button onclick="closeModal('edit-modal')"
+              class="px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg hover:bg-gray-50">
+        Cancel</button>
+      <button onclick="submitEdit()"
+              class="px-4 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90"
+              style="background:#0053e2">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Comments Modal ── -->
+<div class="overlay" id="comments-modal">
+  <div class="modal">
+    <h2 class="text-base font-bold mb-1" style="color:#0053e2" id="comments-title">💬 Notes</h2>
+    <p class="text-xs text-gray-400 mb-4" id="comments-sub"></p>
+    <div id="comments-list" class="mb-4 max-h-64 overflow-y-auto"></div>
+    <hr class="my-3 border-gray-100"/>
+    <div class="field"><label>Your Name</label>
+      <input id="c-author" placeholder="e.g. Brandon J."/></div>
+    <div class="field"><label>Comment *</label>
+      <textarea id="c-body" rows="2" placeholder="Add a note about this trainee…"></textarea></div>
+    <div class="flex gap-3 justify-end mt-4">
+      <button onclick="closeModal('comments-modal')"
+              class="px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg hover:bg-gray-50">
+        Close</button>
+      <button onclick="submitComment()"
+              class="px-4 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90"
+              style="background:#0053e2">Post Note</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const { createClient } = supabase;
+const db = createClient(
+  'https://ihbvglxmanmxmvimsnwe.supabase.co',
+  'sb_publishable_Tn50h0OQFDcSD9xCDg7U1A_YkgQMAu0'
+);
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const AREAS = [
+  'Front End','General Merchandise','Asset Protection',
+  'Food & Consumables','Store Fulfillment','Stocking',
+  'Fashion','Auto Care Center','People',
+];
+const AREA_ICONS = {
+  'Front End':'💰','General Merchandise':'🛒','Asset Protection':'🔒',
+  'Food & Consumables':'🥦','Store Fulfillment':'📱','Stocking':'📦',
+  'Fashion':'👔','Auto Care Center':'🚗','People':'📋',
+};
+const ROLES = [
+  'Store Manager','Co-Manager','Assistant Manager','Team Lead',
+  'Department Manager','Customer Host','Personal Shopper',
+  'Fulfillment Associate','Cap Team','Overnight',
+  'Asset Protection Associate','Cashier','Sales Associate',
+  'Auto Care Technician','Deli/Bakery',
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let S = { trainees: [], editingId: null, commentingId: null };
+
+// ── Walmart week helpers ──────────────────────────────────────────────────────
+function getWeeks() {
+  const today = new Date();
+  const day   = today.getDay();
+  const diff  = day === 6 ? 0 : day + 1;
+  const sat   = new Date(today);
+  sat.setDate(today.getDate() - diff);
+  const weeks = [];
+  for (let i = -8; i <= 4; i++) {
+    const d = new Date(sat);
+    d.setDate(sat.getDate() + i * 7);
+    const fri = new Date(d); fri.setDate(d.getDate() + 6);
+    weeks.push({
+      value: d.toISOString().slice(0,10),
+      label: fmt(d) + ' – ' + fmt(fri),
+      current: i === 0,
+    });
+  }
+  return weeks;
+}
+function fmt(d) {
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function weekLabel(val) {
+  const w = getWeeks().find(w => w.value === val);
+  return w ? w.label : val;
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+window.onload = async () => {
+  // Populate selects
+  const weeks = getWeeks();
+  const curWeek = weeks.find(w => w.current) || weeks[8];
+  ['f-role','e-role'].forEach(id => {
+    document.getElementById(id).innerHTML =
+      ROLES.map(r => `<option>${r}</option>`).join('');
+  });
+  ['f-area','e-area'].forEach(id => {
+    document.getElementById(id).innerHTML =
+      AREAS.map(a => `<option>${a}</option>`).join('');
+  });
+  ['f-week','e-week'].forEach(id => {
+    document.getElementById(id).innerHTML =
+      weeks.map(w => `<option value="${w.value}" ${w.current?'selected':''}>${w.label}</option>`).join('');
+  });
+  // Area filter
+  document.getElementById('filter-area').innerHTML =
+    '<option value="">All Areas</option>' +
+    AREAS.map(a => `<option>${a}</option>`).join('');
+
+  await load();
+};
+
+async function load() {
+  const { data, error } = await db.from('trainees')
+    .select('*').order('created_at', { ascending: false });
+  if (error) { console.error(error); return; }
+  S.trainees = data || [];
+  renderStats();
+  renderTable();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderStats() {
+  const total   = S.trainees.length;
+  const done    = S.trainees.filter(t => t.completed).length;
+  const pct     = total ? Math.round(done/total*100) : 0;
+  document.getElementById('stat-total').textContent    = total;
+  document.getElementById('stat-done').textContent     = done;
+  document.getElementById('stat-progress').textContent = total - done;
+  document.getElementById('stat-pct').textContent      = pct + '%';
+}
+
+function renderTable() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const area   = document.getElementById('filter-area').value;
+  const status = document.getElementById('filter-status').value;
+  const rows   = S.trainees.filter(t =>
+    (!search || t.associate_name.toLowerCase().includes(search)) &&
+    (!area   || t.training_area === area) &&
+    (!status || (status === 'done' ? t.completed : !t.completed))
+  );
+  const tb = document.getElementById('tbl-body');
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-gray-400 text-sm">
+      No trainees match your filters.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = rows.map(t => {
+    const icon = AREA_ICONS[t.training_area] || '📋';
+    return `<tr class="border-t border-gray-50 ${t.completed ? 'bg-green-50' : ''}">
+      <td class="px-4 py-3 font-semibold text-gray-800">${esc(t.associate_name)}</td>
+      <td class="px-4 py-3 text-gray-500 text-xs">${esc(t.role)}</td>
+      <td class="px-4 py-3 text-gray-600">#${esc(t.home_store)}</td>
+      <td class="px-4 py-3 text-gray-600">#${esc(t.training_store)}</td>
+      <td class="px-4 py-3">
+        <span class="badge bg-blue-50 text-blue-800">${icon} ${esc(t.training_area)}</span>
+      </td>
+      <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">${weekLabel(t.walmart_week)}</td>
+      <td class="px-4 py-3 text-center">
+        <span class="badge ${t.completed ? 'status-done' : 'status-pending'}"
+              onclick="toggle(${t.id})" title="Click to toggle">
+          ${t.completed ? '✅ Complete' : '⏳ In Progress'}
+        </span>
+      </td>
+      <td class="px-4 py-3 text-center">
+        <div class="flex items-center justify-center gap-1">
+          <button onclick="openEdit(${t.id})"
+                  class="text-xs font-semibold px-2 py-1 rounded hover:bg-gray-100 text-gray-600"
+                  title="Edit">✏️</button>
+          <button onclick="openComments(${t.id})"
+                  class="text-xs font-semibold px-2 py-1 rounded hover:bg-blue-50"
+                  style="color:#0053e2" title="Notes">💬</button>
+          <button onclick="remove(${t.id}, '${esc(t.associate_name)}')"
+                  class="text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 text-red-500"
+                  title="Remove">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Toggle ────────────────────────────────────────────────────────────────────
+async function toggle(id) {
+  const t = S.trainees.find(x => x.id === id);
+  if (!t) return;
+  t.completed = !t.completed;
+  renderStats(); renderTable();
+  await db.from('trainees').update({ completed: t.completed }).eq('id', id);
+}
+
+// ── Add ───────────────────────────────────────────────────────────────────────
+function openAddModal() {
+  ['f-name','f-home','f-training','f-notes'].forEach(id =>
+    document.getElementById(id).value = '');
+  document.getElementById('add-modal').classList.add('open');
+}
+
+async function submitAdd() {
+  const name     = document.getElementById('f-name').value.trim();
+  const role     = document.getElementById('f-role').value;
+  const home     = document.getElementById('f-home').value.trim();
+  const training = document.getElementById('f-training').value.trim();
+  const area     = document.getElementById('f-area').value;
+  const week     = document.getElementById('f-week').value;
+  const notes    = document.getElementById('f-notes').value.trim();
+  if (!name) { alert('Please enter an associate name.'); return; }
+  closeModal('add-modal');
+  const { data, error } = await db.from('trainees').insert({
+    associate_name: name, role, home_store: home,
+    training_store: training, training_area: area,
+    walmart_week: week, notes, completed: false,
+  }).select().single();
+  if (!error && data) { S.trainees.unshift(data); renderStats(); renderTable(); }
+}
+
+// ── Edit ──────────────────────────────────────────────────────────────────────
+function openEdit(id) {
+  const t = S.trainees.find(x => x.id === id);
+  if (!t) return;
+  S.editingId = id;
+  document.getElementById('e-name').value     = t.associate_name;
+  document.getElementById('e-home').value     = t.home_store;
+  document.getElementById('e-training').value = t.training_store;
+  document.getElementById('e-notes').value    = t.notes || '';
+  document.getElementById('e-role').value     = t.role;
+  document.getElementById('e-area').value     = t.training_area;
+  document.getElementById('e-week').value     = t.walmart_week;
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+async function submitEdit() {
+  const id       = S.editingId;
+  const name     = document.getElementById('e-name').value.trim();
+  const role     = document.getElementById('e-role').value;
+  const home     = document.getElementById('e-home').value.trim();
+  const training = document.getElementById('e-training').value.trim();
+  const area     = document.getElementById('e-area').value;
+  const week     = document.getElementById('e-week').value;
+  const notes    = document.getElementById('e-notes').value.trim();
+  if (!name) { alert('Please enter an associate name.'); return; }
+  closeModal('edit-modal');
+  const updates = { associate_name: name, role, home_store: home,
+    training_store: training, training_area: area,
+    walmart_week: week, notes };
+  const t = S.trainees.find(x => x.id === id);
+  if (t) Object.assign(t, updates);
+  renderStats(); renderTable();
+  await db.from('trainees').update(updates).eq('id', id);
+}
+
+// ── Remove ────────────────────────────────────────────────────────────────────
+async function remove(id, name) {
+  if (!confirm(`Remove ${name} from the tracker?`)) return;
+  S.trainees = S.trainees.filter(t => t.id !== id);
+  renderStats(); renderTable();
+  await db.from('trainees').delete().eq('id', id);
+}
+
+// ── Comments ──────────────────────────────────────────────────────────────────
+async function openComments(id) {
+  S.commentingId = id;
+  const t = S.trainees.find(x => x.id === id);
+  document.getElementById('comments-title').textContent = `💬 Notes — ${t?.associate_name || ''}`;
+  document.getElementById('comments-sub').textContent   = `${t?.role || ''} · #${t?.home_store || ''}`;
+  document.getElementById('c-author').value = '';
+  document.getElementById('c-body').value   = '';
+  document.getElementById('comments-list').innerHTML =
+    '<div class="text-center py-4"><span class="spinner"></span></div>';
+  document.getElementById('comments-modal').classList.add('open');
+  const { data } = await db.from('comments').select('*')
+    .eq('trainee_id', id).order('created_at', { ascending: true });
+  renderComments(data || []);
+}
+
+function renderComments(comments) {
+  const el = document.getElementById('comments-list');
+  if (!comments.length) {
+    el.innerHTML = '<p class="text-center text-gray-400 text-xs py-4">No notes yet. Add one below!</p>';
+    return;
+  }
+  el.innerHTML = comments.map(c => `
+    <div class="comment-card">
+      <div class="flex justify-between items-start">
+        <span class="text-xs font-bold text-gray-700">${esc(c.author) || 'Anonymous'}</span>
+        <button class="comment-del" onclick="delComment(${c.id})">✕</button>
+      </div>
+      <p class="text-sm text-gray-700 mt-1">${esc(c.body)}</p>
+      <p class="text-xs text-gray-400 mt-1">${new Date(c.created_at).toLocaleString()}</p>
+    </div>`).join('');
+}
+
+async function submitComment() {
+  const author = document.getElementById('c-author').value.trim();
+  const body   = document.getElementById('c-body').value.trim();
+  if (!body) { alert('Please enter a comment.'); return; }
+  const { data } = await db.from('comments').insert({
+    trainee_id: S.commentingId, author: author || 'Anonymous', body,
+  }).select().single();
+  document.getElementById('c-author').value = '';
+  document.getElementById('c-body').value   = '';
+  if (data) {
+    const el = document.getElementById('comments-list');
+    const existing = el.querySelector('p.text-center');
+    if (existing) el.innerHTML = '';
+    el.insertAdjacentHTML('beforeend', `
+      <div class="comment-card">
+        <div class="flex justify-between items-start">
+          <span class="text-xs font-bold text-gray-700">${esc(data.author)}</span>
+          <button class="comment-del" onclick="delComment(${data.id})">✕</button>
+        </div>
+        <p class="text-sm text-gray-700 mt-1">${esc(data.body)}</p>
+        <p class="text-xs text-gray-400 mt-1">${new Date(data.created_at).toLocaleString()}</p>
+      </div>`);
+  }
+}
+
+async function delComment(id) {
+  if (!confirm('Delete this note?')) return;
+  await db.from('comments').delete().eq('id', id);
+  await openComments(S.commentingId);
+}
+
+// ── Util ──────────────────────────────────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close modals on backdrop click
+document.querySelectorAll('.overlay').forEach(el =>
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); })
+);
+</script>
+</body>
+</html>
