@@ -221,7 +221,17 @@ const db = createClient('https://ihbvglxmanmxmvimsnwe.supabase.co','sb_publishab
 
 const AREAS = ['Front End','General Merchandise','Asset Protection','Food & Consumables','Store Fulfillment','Stocking','Fashion','Auto Care Center','People'];
 const AREA_ICONS = {'Front End':'💰','General Merchandise':'🛒','Asset Protection':'🔒','Food & Consumables':'🥦','Store Fulfillment':'📱','Stocking':'📦','Fashion':'👔','Auto Care Center':'🚗','People':'📋'};
-const ROLES = ['Store Manager','Co-Manager','Assistant Manager','Team Lead','Department Manager','Customer Host','Personal Shopper','Fulfillment Associate','Cap Team','Overnight','Asset Protection Associate','Cashier','Sales Associate','Auto Care Technician','Deli/Bakery'];
+const ROLE_GROUPS = {
+  'Store Leadership': ['Store Manager','Co-Manager','Assistant Manager'],
+  'Coach': ['Coach - Fashion','Coach - GM','Coach - Food/Fresh','Coach - Front End','Coach - AP Ops','Coach - Stocking Day','Coach - Stocking O/N','Coach - Digital','Coach - ACC'],
+  'Team Lead': ['TL - Fashion','TL - Meat/Produce','TL - Entertainment','TL - Deli','TL - Hardlines','TL - Bakery','TL - ACC','TL - Dry Grocery','TL - Seasonal','TL - Frozen/Dairy','TL - Home','TL - HBA','TL - Front End','TL - AP TL','TL - Overnight','TL - Stocking 1','TL - Stocking 2','TL - Digital'],
+  'Associates': ['Customer Host','Personal Shopper','Fulfillment Associate','Cap Team','Overnight','Asset Protection Associate','Cashier','Sales Associate','Auto Care Technician'],
+};
+function roleOptions(){
+  return Object.entries(ROLE_GROUPS).map(([g,roles])=>
+    `<optgroup label="${g}">${roles.map(r=>`<option>${r}</option>`).join('')}</optgroup>`
+  ).join('');
+}
 
 let S = {trainees:[], editingId:null, commentingId:null, editingStoreId:null, activeAreaId:null, areas:[], areaLinks:[], hubData:[], hubLoaded:false};
 
@@ -231,13 +241,31 @@ function closeModal(id){document.getElementById(id).classList.remove('open')}
 document.querySelectorAll('.overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open')}));
 
 // ── weeks ──
+function wmFYStart(fyYear){
+  // Nearest Saturday to Feb 1 of (fyYear-1) — that's when the FY starts
+  const feb1=new Date(fyYear-1,1,1);
+  const day=feb1.getDay();
+  const backDays=day===6?0:day+1;
+  const prev=new Date(feb1); prev.setDate(feb1.getDate()-backDays);
+  const next=new Date(prev); next.setDate(prev.getDate()+7);
+  return (feb1-prev)<=(next-feb1)?prev:next;
+}
+function getWmWeek(sat){
+  const y=sat.getFullYear();
+  for(let fy=y+2;fy>=y;fy--){
+    const s=wmFYStart(fy);
+    if(sat>=s) return {num:Math.round((sat-s)/(7*864e5))+1,fy};
+  }
+  return {num:1,fy:y+1};
+}
 function getWeeks(){
   const today=new Date(),day=today.getDay(),diff=day===6?0:day+1;
   const sat=new Date(today); sat.setDate(today.getDate()-diff);
-  return Array.from({length:13},(_,i)=>{
+  return Array.from({length:16},(_,i)=>{
     const d=new Date(sat); d.setDate(sat.getDate()+(i-8)*7);
     const fri=new Date(d); fri.setDate(d.getDate()+6);
-    return {value:d.toISOString().slice(0,10),label:fmt(d)+' – '+fmt(fri),current:i===8};
+    const {num,fy}=getWmWeek(d);
+    return {value:d.toISOString().slice(0,10),label:`WM Wk ${num} · ${fmt(d)} – ${fmt(fri)}`,current:i===8};
   });
 }
 function fmt(d){return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
@@ -246,7 +274,7 @@ function weekLabel(val){return getWeeks().find(w=>w.value===val)?.label||val}
 // ── boot ──
 window.onload=async()=>{
   const weeks=getWeeks();
-  ['f-role','e-role'].forEach(id=>{document.getElementById(id).innerHTML=ROLES.map(r=>`<option>${r}</option>`).join('')});
+  ['f-role','e-role'].forEach(id=>{document.getElementById(id).innerHTML=roleOptions()});
   ['f-area','e-area'].forEach(id=>{document.getElementById(id).innerHTML=AREAS.map(a=>`<option>${a}</option>`).join('')});
   ['f-week','e-week'].forEach(id=>{document.getElementById(id).innerHTML=weeks.map(w=>`<option value="${w.value}"${w.current?' selected':''}>${w.label}</option>`).join('')});
   document.getElementById('filter-area').innerHTML='<option value="">All Areas</option>'+AREAS.map(a=>`<option>${a}</option>`).join('');
