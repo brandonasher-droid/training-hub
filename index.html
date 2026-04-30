@@ -222,10 +222,8 @@ const db = createClient('https://ihbvglxmanmxmvimsnwe.supabase.co','sb_publishab
 const AREAS = ['Front End','General Merchandise','Asset Protection','Food & Consumables','Store Fulfillment','Stocking','Fashion','Auto Care Center','People'];
 const AREA_ICONS = {'Front End':'💰','General Merchandise':'🛒','Asset Protection':'🔒','Food & Consumables':'🥦','Store Fulfillment':'📱','Stocking':'📦','Fashion':'👔','Auto Care Center':'🚗','People':'📋'};
 const ROLE_GROUPS = {
-  'Store Leadership': ['Store Manager','Co-Manager','Assistant Manager'],
   'Coach': ['Coach - Fashion','Coach - GM','Coach - Food/Fresh','Coach - Front End','Coach - AP Ops','Coach - Stocking Day','Coach - Stocking O/N','Coach - Digital','Coach - ACC'],
   'Team Lead': ['TL - Fashion','TL - Meat/Produce','TL - Entertainment','TL - Deli','TL - Hardlines','TL - Bakery','TL - ACC','TL - Dry Grocery','TL - Seasonal','TL - Frozen/Dairy','TL - Home','TL - HBA','TL - Front End','TL - AP TL','TL - Overnight','TL - Stocking 1','TL - Stocking 2','TL - Digital'],
-  'Associates': ['Customer Host','Personal Shopper','Fulfillment Associate','Cap Team','Overnight','Asset Protection Associate','Cashier','Sales Associate','Auto Care Technician'],
 };
 function roleOptions(){
   return Object.entries(ROLE_GROUPS).map(([g,roles])=>
