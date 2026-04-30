@@ -121,15 +121,28 @@ tr:hover{background:#eff6ff}
       <button onclick="closePanel()" class="text-gray-400 hover:text-gray-700 text-xl font-bold px-2">✕</button>
     </div>
     <div id="panel-links" class="mb-4"></div>
-    <div class="border-t border-gray-100 pt-4">
-      <p class="text-xs font-bold text-gray-500 uppercase mb-2">Add a Resource Link</p>
-      <div class="flex gap-2 flex-wrap">
-        <input id="link-title" placeholder="Title (e.g. Training Guide)"
-          class="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-40 focus:outline-none focus:border-blue-400"/>
-        <input id="link-url" placeholder="URL (OneDrive, SharePoint…)"
-          class="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-48 focus:outline-none focus:border-blue-400"/>
-        <button onclick="addLink()"
-          class="bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-800">Add</button>
+    <div class="border-t border-gray-100 pt-4 space-y-3">
+      <div>
+        <p class="text-xs font-bold text-gray-500 uppercase mb-2">📎 Add a Link</p>
+        <div class="flex gap-2 flex-wrap">
+          <input id="link-title" placeholder="Title (e.g. Training Guide)"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-40 focus:outline-none focus:border-blue-400"/>
+          <input id="link-url" placeholder="URL (OneDrive, SharePoint…)"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-48 focus:outline-none focus:border-blue-400"/>
+          <button onclick="addLink()" class="bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-800">Add</button>
+        </div>
+      </div>
+      <div>
+        <p class="text-xs font-bold text-gray-500 uppercase mb-2">📄 Upload a PDF</p>
+        <div class="flex gap-2 flex-wrap items-center">
+          <input id="pdf-title" placeholder="PDF title (e.g. Dept Number Listing)"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-40 focus:outline-none focus:border-blue-400"/>
+          <label class="cursor-pointer bg-white border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <input id="pdf-file" type="file" accept=".pdf" class="hidden" onchange="uploadPDF()"/>
+            📂 Choose PDF
+          </label>
+          <span id="pdf-status" class="text-xs text-gray-400"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -198,6 +211,17 @@ tr:hover{background:#eff6ff}
       <button onclick="closeModal('comments-modal')" class="px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
       <button onclick="submitComment()" class="px-4 py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90" style="background:#0053e2">Post</button>
     </div>
+  </div>
+</div>
+
+<!-- PDF Viewer -->
+<div class="overlay" id="pdf-modal">
+  <div class="modal" style="width:min(860px,96vw);max-height:92vh;padding:1rem">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-base font-bold" style="color:#0053e2" id="pdf-modal-title">📄 PDF</h2>
+      <button onclick="closeModal('pdf-modal')" class="text-gray-400 hover:text-gray-700 text-xl font-bold px-2">✕</button>
+    </div>
+    <iframe id="pdf-frame" src="" class="w-full rounded-lg border border-gray-100" style="height:75vh"></iframe>
   </div>
 </div>
 
@@ -448,17 +472,49 @@ function closePanel(){document.getElementById('area-panel').classList.add('hidde
 function renderPanelLinks(){
   const el=document.getElementById('panel-links');
   if(!S.areaLinks.length){el.innerHTML='<p class="text-sm text-gray-400">No resources yet — add one below!</p>';return}
-  el.innerHTML=S.areaLinks.map(l=>`<div class="flex items-center gap-2 mb-2">
-    <a href="${esc(l.url)}" target="_blank" class="flex-1 text-sm font-semibold hover:underline" style="color:#0053e2">📎 ${esc(l.title)}</a>
-    <button onclick="delLink(${l.id})" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button></div>`).join('');
+  el.innerHTML=S.areaLinks.map(l=>{
+    const isPdf=l.notes==='pdf';
+    return `<div class="flex items-center gap-2 mb-2">
+      ${isPdf
+        ? `<button onclick="openPdf('${esc(l.url)}','${esc(l.title)}')"
+             class="flex-1 text-sm font-semibold hover:underline text-left" style="color:#0053e2">📄 ${esc(l.title)}</button>`
+        : `<a href="${esc(l.url)}" target="_blank"
+             class="flex-1 text-sm font-semibold hover:underline" style="color:#0053e2">📎 ${esc(l.title)}</a>`
+      }
+      <button onclick="delLink(${l.id})" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button>
+    </div>`;
+  }).join('');
+}
+function openPdf(url,title){
+  document.getElementById('pdf-modal-title').textContent='📄 '+title;
+  document.getElementById('pdf-frame').src=url;
+  document.getElementById('pdf-modal').classList.add('open');
 }
 async function addLink(){
   const title=document.getElementById('link-title').value.trim();
   const url=document.getElementById('link-url').value.trim();
   if(!title||!url){alert('Please enter both a title and URL.');return}
-  const {data}=await db.from('area_links').insert({area_id:S.activeAreaId,title,url,order_index:S.areaLinks.length}).select().single();
+  const {data}=await db.from('area_links').insert({area_id:S.activeAreaId,title,url,notes:'',order_index:S.areaLinks.length}).select().single();
   if(data){S.areaLinks.push(data); renderPanelLinks();}
   document.getElementById('link-title').value=''; document.getElementById('link-url').value='';
+}
+async function uploadPDF(){
+  const file=document.getElementById('pdf-file').files[0];
+  const title=document.getElementById('pdf-title').value.trim()||file?.name||'PDF';
+  const status=document.getElementById('pdf-status');
+  if(!file){return}
+  if(file.type!=='application/pdf'){alert('Please select a PDF file.');return}
+  status.textContent='⏳ Uploading...';
+  const path=`area-${S.activeAreaId}/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi,'-')}`;
+  const {error}=await db.storage.from('guides').upload(path,file,{contentType:'application/pdf',upsert:true});
+  if(error){status.textContent='❌ Upload failed: '+error.message;return}
+  const {data:{publicUrl}}=db.storage.from('guides').getPublicUrl(path);
+  const {data}=await db.from('area_links').insert({area_id:S.activeAreaId,title,url:publicUrl,notes:'pdf',order_index:S.areaLinks.length}).select().single();
+  if(data){S.areaLinks.push(data); renderPanelLinks();}
+  status.textContent='✅ Uploaded!';
+  document.getElementById('pdf-title').value='';
+  document.getElementById('pdf-file').value='';
+  setTimeout(()=>status.textContent='',3000);
 }
 async function delLink(id){
   if(!confirm('Remove this link?')) return;
@@ -482,7 +538,7 @@ function renderHub(){
     const roles=[...S.hubData.filter(h=>h.section===sec)].sort((a,b)=>a.role_name.localeCompare(b.role_name));
     return `<div class="mb-6">
       <h3 class="text-sm font-bold text-gray-600 mb-3 pb-1.5 border-b border-gray-200">${sec==='Coach'?'🏆':'🎯'} ${sec}</h3>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+      <div class="gap-2" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">
         ${roles.map(h=>`
           <div class="bg-white rounded-lg border border-gray-100 shadow-sm border-l-4 overflow-hidden" style="border-left-color:#0053e2">
             <div class="px-2.5 pt-2 pb-0.5">
